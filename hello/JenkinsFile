@@ -1,236 +1,43 @@
 pipeline {
-	agent any
-    
-    tools {
-      maven 'Maven_3.8.6'
-          }
+    agent any
 
-    environment {
-        //Use Pipeline Utility Steps plugin to read information from pom.xml into env variables
-        ARTIFACT_NAME = readMavenPom(file: 'pom.xml').getArtifactId()
-        VERSION = readMavenPom(file: 'pom.xml').getVersion()
-        PACKAGING = readMavenPom(file: 'pom.xml').getPackaging()
-        BITBUCKET_CREDS = credentials('AWS_Jenkins_BB.')
-	         }
-
-	options {
-              timeout(time: 20, unit: 'MINUTES')
-                }
-
-
-    stages{
-        stage('Compile'){
-            steps{
-		    
-                sh script: 'cp ../scripts/poms/deploy-mule-4-pom.xml ../scripts/poms/any-exchange-settings.xml ./'
-                sh script: 'mvn clean -U compile -s any-exchange-settings.xml'
-                 }
+    stages {
+        stage('Hello') {
+                steps {
+                   script {
+                        if (destination=='CloudHub') {
+                            echo 'I only execute CloudHub build'
+                        } else {
+                            echo 'I only execute On-Premise build'
                         }
-        
-        stage(' ArtifactVer Automation'){
-			steps{
-				script{
-
-				   sh "rm -rf version.txt"
-					if (env.BRANCH_NAME == 'build' || env.BRANCH_NAME == 'master'){
-						sh '''
-							sversion=`mvn help:evaluate -Dexpression=project.version -q -DforceStdout`
-
-							if [[ ${sversion} == *-SNAPSHOT* ]]; then
-								version=`echo "$sversion" | cut -d '-' -f1`
-								mvn versions:set -DnewVersion=$version
-							else
-								echo " version is as expected $sversion "
-								version=$sversion
-							fi
-							echo $version >> version.txt
-						'''
-                          }
-                        else {
-                            if (env.BRANCH_NAME == 'preprod'){
-						sh '''
-							sversion=`mvn help:evaluate -Dexpression=project.version -q -DforceStdout`
-
-                                if [[ ${sversion} == *-SNAPSHOT* ]]; then
-                                	version=`echo "$sversion" | cut -d '-' -f1`
-									version="$version-PREPROD"
-    								mvn versions:set -DnewVersion=$version
-                                	echo " version is $version "
-                                	echo " Branch is preprod "
-                                else
-	    							version="$sversion-PREPROD"
-    								mvn versions:set -DnewVersion=$version
-                                	echo " version is $sversion "
-                                	version=$sversion
-                                fi
-							echo $version >> version.txt
-						'''
-                            }
-
-                            else{
-                            if (env.BRANCH_NAME == 'sit'){
-						    sh '''
-                                sversion=`mvn help:evaluate -Dexpression=project.version -q -DforceStdout`
-                                if [[ ${sversion} == *-SNAPSHOT* ]]; then
-                                	version=`echo "$sversion" | cut -d '-' -f1`
-									version="$version-SIT"
-    								mvn versions:set -DnewVersion=$version
-                                	echo " version is $version "
-                                	echo " Branch is sit "
-                                else
-	    							version="$sversion-SIT"
-    								mvn versions:set -DnewVersion=$version
-                                	echo " version is $sversion "
-                                	version=$sversion
-                                fi
-							echo $version >> version.txt
-						    '''
-                            }
-
-			    else{
-                            if (env.BRANCH_NAME == 'uat'){
-						    sh '''
-                                sversion=`mvn help:evaluate -Dexpression=project.version -q -DforceStdout`
-                                if [[ ${sversion} == *-SNAPSHOT* ]]; then
-                                	version=`echo "$sversion" | cut -d '-' -f1`
-									version="$version-UAT"
-    								mvn versions:set -DnewVersion=$version
-                                	echo " version is $version "
-                                	echo " Branch is uat "
-                                else
-	    							version="$sversion-UAT"
-    								mvn versions:set -DnewVersion=$version
-                                	echo " version is $sversion "
-                                	version=$sversion
-                                fi
-							echo $version >> version.txt
-						    '''
-                            }
-
-
-					else {
-						sh '''
-							sversion=`mvn help:evaluate -Dexpression=project.version -q -DforceStdout`
-							echo $sversion
-							if [[ ${sversion} != *-SNAPSHOT* ]] ; then
-								version="$sversion-SNAPSHOT"
-								mvn versions:set -DnewVersion=$version
-							else
-								echo " version is as expected $sversion "
-								version=$sversion
-							fi
-							echo $version >> version.txt
-						'''
-					     }}}
-					}
-
-				      }
-			     }
-		                                }
-        
-
-                         
-        stage('Deploy jar to Artifactory'){
-            steps{
-                sh script:  'mvn test-compile test package -Dmule.env=dev -Djks.password=mulesoft -Dmule.key=mulesoftmulesoft deploy -s any-exchange-settings.xml'
-                sh '''
-                ls -lrt ${WORKSPACE}/target
-                   '''
-                 }
-                                          } 
-					  
-					  
-	    stage('Munit Report'){
-	        steps{
-		        sh '''
-                echo " ${WORKSPACE} "
-                cd ${WORKSPACE}
-		        ls -lrt ${WORKSPACE}/ci
-                mkdir -p  MunitReports
-                echo " ${WORKSPACE} "
-                mv ./target/site/munit/coverage/summary.html ./MunitReports/MunitReport-$BUILD_ID.html
-		           '''
-		         }
-		                     }
-
-  stage('Deploy'){
-	        when {
-    		  expression{env.BRANCH_NAME == 'development'}
-		       }
-
-            steps {
-
-           sh "rm -rf output.tar"
-           sh('git archive --remote=ssh://git@bitbucket.org/lla-dev/ecom_environment_pipeline.git HEAD "${ARTIFACT_NAME}/${ARTIFACT_NAME}-dev.properties" >> output.tar || return=$?')
-	       sh "ci/deploy.sh"
+                    }
+            }
+        }
+        stage('Build-CloudHub') {
+                steps {
+                   script {
+                        if (destination=='CloudHub') {
+                            echo 'I only execute CloudHub build'
+                            echo readMavenPom(file: 'cloudhub-pom.xml').getArtifactId()
+                            echo readMavenPom(file: 'cloudhub-pom.xml').getVersion()
+                            echo readMavenPom(file: 'cloudhub-pom.xml').getPackaging()
+                        }
+                    }
+            }
+        }
+        stage('Build-OnPremise') {
+                steps {
+                   script {
+                        if (destination=='On-Premise') {
+                            echo 'I only execute On-Premise build'
+                            echo readMavenPom(file: 'cloudhub-pom.xml').getArtifactId()
+                            echo readMavenPom(file: 'cloudhub-pom.xml').getVersion()
+                            echo readMavenPom(file: 'cloudhub-pom.xml').getPackaging()
+                        } 
+                    }
             }
         }
         
-  //stage ('TestOps_katalon') {
-
-	//when {
-
-       //     expression{env.BRANCH_NAME == 'development'}
-
-        //   }
-       //    steps {
-           
-       //         build job: 'ESB_APIs_Testops_execution', parameters: [[$class: 'StringParameterValue', name: 'Environment', value: env.BRANCH_NAME ], [$class: 'StringParameterValue', name: 'API_Name', value: env.ARTIFACT_NAME ]], wait:false
-		///        echo "job trigger to TestOps Development Environment"
-            
-   //       }
-    //    }    
-    //stage('email'){
-      //  steps{
-       // emailext(attachLog: true, body: 'AWS Jenkins Build Info', subject: 'AWS Jenkins Build Info', to: 'shaik.basha@cwc.com')
-      //  }
-//}
-    //    postman tests
-    //    stage('Integration Test') {
-	//	    when {
-   	//		  expression{env.BRANCH_NAME == 'development'}
-	//	         }
-	//		steps {
-	//			sh 'npm run newman-tests'
-	//			junit 'newman.xml'
-	//		       }
-    //                                }
-	    
-	      }
-
-post {
-	always {
-                 cleanWs()
-		 script {
-		  if (env.BRANCH_NAME == 'development') {
-                     BUILD_TRIGGER_BY = "${currentBuild.getBuildCauses()[0].shortDescription}"
-                     echo "BUILD_TRIGGER_BY: ${BUILD_TRIGGER_BY}"
-		archiveArtifacts allowEmptyArchive: true, artifacts: 'MunitReports/MunitReport-${BUILD_NUMBER}.html', onlyIfSuccessful: true
-		archiveArtifacts allowEmptyArchive: true, artifacts: 'report/${BUILD_NUMBER}/htmlreport.html', onlyIfSuccessful: true
-		emailext attachLog: true, mimeType:'text/html', attachmentsPattern: 'MunitReports/MunitReport-${BUILD_NUMBER}.html', onlyIfSuccessful: false, 		
-		subject: "Jenkins Build ${currentBuild.result}, Build- ${env.BUILD_NUMBER}", body: "Hi Team, <br> <br> The build got ${currentBuild.result}. Below are the details: <br> <br> Job: ${env.JOB_NAME} <br> Build: ${env.BUILD_NUMBER} <br> ${BUILD_TRIGGER_BY} <br> <br> This is an auto-generated email. Please do not reply to this email. <br> <br> <br> Thanks & Regards, <br> DevOps LLA", 
-                compressLog: true, from: "noreply@devops.lla.com", to: "sreedhar.butta@cwc.com, shaik.basha@cwc.com"
-			
-//		 publishHTML target: [
-//                 allowMissing: false,
-//                 alwaysLinkToLastBuild: false,
-//                 keepAll: true,
-//                 reportDir: 'MunitReports',
-//	         reportFiles: 'MunitReport-${BUILD_ID}.html',
-//                 reportName: 'Munit Report'
-//                 ]
-
-//        publishHTML (target: [
-//                 allowMissing: false,
-//                 alwaysLinkToLastBuild: false,
-//                 keepAll: true,
-//                 reportDir: 'report/${BUILD_NUMBER}',
-//                 reportFiles: 'htmlreport.html',
-//                 reportName: 'Integration Test Report'
-//                 ])
-			                                  } 
-		         }	
-	       }	
-	 }
-         }
-         
+        
+    }
+}
